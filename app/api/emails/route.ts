@@ -1,5 +1,5 @@
 import { createDb } from "@/lib/db"
-import { and, eq, gt, lt, or, sql } from "drizzle-orm"
+import { and, eq, gt, lt, or, sql, like } from "drizzle-orm"
 import { NextResponse } from "next/server"
 import { emails } from "@/lib/schema"
 import { encodeCursor, decodeCursor } from "@/lib/cursor"
@@ -14,13 +14,15 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const cursor = searchParams.get('cursor')
-  
+  const search = searchParams.get('search')
+
   const db = createDb()
 
   try {
     const baseConditions = and(
       eq(emails.userId, userId!),
-      gt(emails.expiresAt, new Date())
+      gt(emails.expiresAt, new Date()),
+      search ? like(emails.address, `%${search}%`) : undefined
     )
 
     const totalResult = await db.select({ count: sql<number>`count(*)` })

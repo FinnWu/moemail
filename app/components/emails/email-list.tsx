@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { CreateDialog } from "./create-dialog"
-import { Mail, RefreshCw, Trash2 } from "lucide-react"
+import { Mail, RefreshCw, Trash2, Search, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { useThrottle } from "@/hooks/use-throttle"
 import { EMAIL_CONFIG } from "@/config"
 import { useToast } from "@/components/ui/use-toast"
@@ -52,18 +53,31 @@ export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
   const [loadingMore, setLoadingMore] = useState(false)
   const [total, setTotal] = useState(0)
   const [emailToDelete, setEmailToDelete] = useState<Email | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
   const { toast } = useToast()
 
-  const fetchEmails = async (cursor?: string) => {
+  const fetchEmails = async (cursor?: string, search?: string, forceReplace?: boolean) => {
     try {
       const url = new URL("/api/emails", window.location.origin)
       if (cursor) {
         url.searchParams.set('cursor', cursor)
       }
+      if (search && search.trim()) {
+        url.searchParams.set('search', search.trim())
+      }
       const response = await fetch(url)
       const data = await response.json() as EmailResponse
       
       if (!cursor) {
+        // 如果是搜索或强制替换，直接替换邮件列表
+        if ((search !== undefined && search.trim() !== "") || forceReplace) {
+          setEmails(data.emails)
+          setNextCursor(data.nextCursor)
+          setTotal(data.total)
+          return
+        }
+
+        // 如果是普通刷新，尝试合并新邮件
         const newEmails = data.emails
         const oldEmails = emails
 
@@ -96,7 +110,36 @@ export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
 
   const handleRefresh = async () => {
     setRefreshing(true)
-    await fetchEmails()
+    await fetchEmails(undefined, searchQuery)
+  }
+
+  const performSearch = async (query: string) => {
+    setLoading(true)
+    setEmails([])
+    setNextCursor(null)
+    await fetchEmails(undefined, query)
+  }
+
+  const handleSearchSubmit = () => {
+    if (searchQuery.trim()) {
+      performSearch(searchQuery.trim())
+    } else {
+      clearSearch()
+    }
+  }
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearchSubmit()
+    }
+  }
+
+  const clearSearch = async () => {
+    setSearchQuery("")
+    setLoading(true)
+    setEmails([])
+    setNextCursor(null)
+    await fetchEmails(undefined, undefined, true)
   }
 
   const handleScroll = useThrottle((e: React.UIEvent<HTMLDivElement>) => {
@@ -108,7 +151,7 @@ export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
 
     if (remainingScroll <= threshold && nextCursor) {
       setLoadingMore(true)
-      fetchEmails(nextCursor)
+      fetchEmails(nextCursor, searchQuery)
     }
   }, 200)
 
@@ -179,6 +222,39 @@ export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
             </span>
           </div>
           <CreateDialog onEmailCreated={handleRefresh} />
+        </div>
+
+        <div className="p-2 border-b border-primary/20">
+          <div className="relative flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="搜索邮箱地址..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={handleKeyPress}
+                className="pl-8 pr-8 h-8 text-sm"
+              />
+              {searchQuery && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={clearSearch}
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSearchSubmit}
+              className="h-8 px-3"
+            >
+              搜索
+            </Button>
+          </div>
         </div>
         
         <div className="flex-1 overflow-auto p-2" onScroll={handleScroll}>

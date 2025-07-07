@@ -83,7 +83,7 @@ export default function RootLayout({
       <body 
         className={cn(
           zpix.variable,
-          "font-zpix min-h-screen antialiased",
+          "min-h-screen antialiased",
           "bg-background text-foreground",
           "transition-colors duration-300"
         )}
